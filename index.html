@@ -4,23 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HTTP Request Visualizer</title>
+  <!-- Prism Dark Theme -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" />
+  <!-- Prism Core and JSON plugin -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js" defer></script>
+  <!-- LZ-String for URL compression -->
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js" defer></script>
   <style>
-    body { margin:0; padding:20px; font-family: Arial, sans-serif; background-color: #f5f7fa; }
-    .form-container { max-width: 800px; margin: 0 auto 20px; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    .form-group { margin-bottom: 15px; }
-    .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-    .form-group input, .form-group select, .form-group textarea { width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; font-family: monospace; }
+    body { margin:0; padding:20px; font-family:Arial,sans-serif; background-color:#2d2d2d; color:#ccc; }
+    .form-container { max-width:800px; margin:0 auto 20px; padding:20px; background:#3a3a3a; border-radius:10px; border:1px solid #444; }
+    .form-group { margin-bottom:15px; }
+    .form-group label { display:block; margin-bottom:5px; font-weight:bold; color:#ddd; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:8px; background:#2a2a2a; border:1px solid #444; border-radius:5px; font-family:monospace; color:#ccc; }
     .form-group textarea { resize:vertical; min-height:100px; }
-    .btn { display:inline-block; padding:10px 20px; background:#007bff; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:16px; margin-right:10px; }
-    .btn:hover { background:#0056b3; }
-    .card { max-width:800px; margin:0 auto; padding:20px; background:#fff; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+    .btn { display:inline-block; padding:10px 20px; background:#005b96; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:16px; }
+    .btn:hover { background:#004075; }
+    .card { max-width:800px; margin:0 auto; padding:20px; background:#3a3a3a; border-radius:10px; border:1px solid #444; }
     .endpoint { font-size:18px; margin-bottom:10px; }
-    .method { display:inline-block; padding:3px 8px; border-radius:3px; color:#fff; font-weight:bold; text-transform:uppercase; margin-right:10px; }
+    .endpoint .method { display:inline-block; padding:3px 8px; border-radius:3px; font-weight:bold; text-transform:uppercase; margin-right:10px; }
     .method.GET { background:#28a745; } .method.POST { background:#17a2b8; } .method.PUT { background:#ffc107; color:#212529; } .method.DELETE { background:#dc3545; } .method.PATCH { background:#6f42c1; }
-    pre { background:#f0f0f0; padding:10px; border-radius:5px; overflow:auto; }
     .section { margin-bottom:20px; }
-    .section h3 { margin-bottom:10px; font-size:16px; border-bottom:1px solid #ddd; padding-bottom:5px; }
-    #share-msg { font-size:14px; color:green; display:none; vertical-align:middle; }
+    .section h3 { margin-bottom:10px; font-size:16px; border-bottom:1px solid #555; padding-bottom:5px; color:#ddd; }
+    pre { margin:0; }
+    pre code { display:block; padding:10px; overflow:auto; background:none; color:inherit; }
+    #share-msg { font-size:14px; color:#0f0; display:none; vertical-align:middle; margin-left:10px; }
   </style>
 </head>
 <body>
@@ -35,45 +43,63 @@
     </div>
     <div class="form-group">
       <label for="request">Request Example (JSON)</label>
-      <textarea id="request" placeholder='{"key": "value"}'></textarea>
+      <textarea id="request" placeholder='{ "key": "value" }'></textarea>
     </div>
     <div class="form-group">
       <label for="response">Response Example (JSON)</label>
-      <textarea id="response" placeholder='{"success": true, "data": {}}'></textarea>
+      <textarea id="response" placeholder='{ "success": true, "data": {} }'></textarea>
     </div>
     <button class="btn" id="share">Copy Embed Code</button>
     <span id="share-msg">Embed code copied!</span>
   </div>
+
   <div id="visualization"></div>
+
   <script>
-    // Helpers
-    const params = new URLSearchParams(window.location.search);
-    const isEmbed = params.get('embed') === 'true';
-    if (isEmbed) {
-      document.getElementById('form-container').style.display = 'none';
-    }
-    function updateQueryString(p) {
-      history.replaceState(null, '', window.location.pathname + '?' + p.toString());
-    }
-    function generateVisualization(data, updateUrl=true) {
+    // Utility: generate and render
+    function generateVisualization(data, updateHash = true) {
       const { method, url, request, response } = data;
-      document.getElementById('visualization').innerHTML = `
+      const viz = document.getElementById('visualization');
+      viz.innerHTML = `
         <div class="card">
           <div class="endpoint">
             <span class="method ${method}">${method}</span>
             <span>${url}</span>
           </div>
-          <div class="section"><h3>Request Example</h3><pre>${request}</pre></div>
-          <div class="section"><h3>Response Example</h3><pre>${response}</pre></div>
+          <div class="section">
+            <h3>Request Example</h3>
+            <pre><code class="language-json">${request}</code></pre>
+          </div>
+          <div class="section">
+            <h3>Response Example</h3>
+            <pre><code class="language-json">${response}</code></pre>
+          </div>
         </div>`;
-      if (updateUrl) {
-        params.set('method', method); params.set('url', url);
-        params.set('request', request); params.set('response', response);
-        params.set('embed', 'true');
-        updateQueryString(params);
+      if (window.Prism) {
+        Prism.highlightAllUnder(viz);
+      }
+      if (updateHash && window.LZString) {
+        const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(data));
+        window.location.hash = 'data=' + compressed;
       }
     }
-    // Share button
+
+    // On load: check for data hash
+    window.addEventListener('DOMContentLoaded', () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#data=')) {
+        try {
+          const json = LZString.decompressFromEncodedURIComponent(hash.slice(6));
+          const data = JSON.parse(json);
+          document.getElementById('form-container').style.display = 'none';
+          generateVisualization(data, false);
+        } catch (e) {
+          console.warn('Failed to load data from URL');
+        }
+      }
+    });
+
+    // Share button: parse inputs, render, copy iframe
     document.getElementById('share').addEventListener('click', () => {
       const method = document.getElementById('method').value;
       const url = document.getElementById('url').value.trim();
@@ -83,25 +109,13 @@
       try { res = JSON.stringify(JSON.parse(res), null, 2); } catch { return alert('Invalid response JSON'); }
       const data = { method, url, request: req, response: res };
       generateVisualization(data);
-      const src = window.location.origin + window.location.pathname + '?' + params.toString();
-      const embedCode = `<iframe src="${src}" style="width:100%; height:400px; border:0;"></iframe>`;
+      const iframeSrc = window.location.origin + window.location.pathname + window.location.hash;
+      const embedCode = `<iframe src="${iframeSrc}" style="width:100%; height:400px; border:0;"></iframe>`;
       navigator.clipboard.writeText(embedCode).then(() => {
-        const msg = document.getElementById('share-msg'); msg.style.display='inline';
-        setTimeout(() => msg.style.display='none',2000);
+        const msg = document.getElementById('share-msg'); msg.style.display = 'inline';
+        setTimeout(() => msg.style.display = 'none', 2000);
       });
     });
-    // On load render if embed params present
-    if (params.has('url') && isEmbed) {
-      try {
-        const data = {
-          method: params.get('method'),
-          url: params.get('url'),
-          request: JSON.stringify(JSON.parse(params.get('request')), null, 2),
-          response: JSON.stringify(JSON.parse(params.get('response')), null, 2)
-        };
-        generateVisualization(data, false);
-      } catch { console.warn('Could not parse params'); }
-    }
   </script>
 </body>
 </html>
